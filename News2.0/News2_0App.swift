@@ -1,4 +1,3 @@
-
 import SwiftUI
 import WebKit
 
@@ -7,8 +6,10 @@ struct News: Identifiable, Decodable {
     var id: String { url }
     let title: String
     let description: String?
+    let content: String?
     let url: String
     let urlToImage: String?
+    let publishedAt: String
 }
 
 // News List Decodable to match the API response structure
@@ -34,6 +35,22 @@ class NewsService {
             }
         }.resume()
     }
+    
+    func loadImage(url: String, completion: @escaping (Data?) -> ()) {
+        guard let imageUrl = URL(string: url) else {
+            completion(nil)
+            return
+        }
+        
+        URLSession.shared.dataTask(with: imageUrl) { data, response, error in
+            guard let data = data else {
+                completion(nil)
+                return
+            }
+            
+            completion(data)
+        }.resume()
+    }
 }
 
 // SwiftUI View for displaying news details
@@ -41,47 +58,49 @@ struct NewsDetailView: View {
     let news: News
 
     var body: some View {
-        WebView(url: URL(string: news.url)!)
-            .navigationTitle(news.title)
+        ScrollView {
+            VStack(alignment: .leading) {
+                if let imageUrl = news.urlToImage,
+                   let imageData = loadImage(url: imageUrl) {
+                    Image(uiImage: UIImage(data: imageData)!)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 300)
+                        .clipped()
+                }
+                
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(news.title)
+                        .font(.title)
+                        .padding(.bottom, 8)
+                    if let description = news.description {
+                        GeometryReader { geometry in
+                            Text(description)
+                                .font(.body)
+                                .padding(.horizontal, geometry.size.width * 0.1)
+                        }
+                    }
+                    if let content = news.content {
+                        Text(content)
+                            .font(.body)
+                            .padding(.horizontal, 10)
+                    }
+                }
+                .padding(.all, 16)
+                
+                Spacer()
+            }
+        }
+        .navigationTitle(news.title)
+    }
+    
+    private func loadImage(url: String) -> Data? {
+        guard let imageUrl = URL(string: url),
+              let imageData = try? Data(contentsOf: imageUrl) else {
+            return nil
+        }
+        return imageData
     }
 }
 
 // SwiftUI View for displaying a list of news
-struct ContentView: View {
-    @State private var newsList: [News] = []
-    
-    var body: some View {
-        NavigationView {
-            List(newsList) { news in
-                NavigationLink(destination: NewsDetailView(news: news)) {
-                    VStack(alignment: .leading) {
-                        Text(news.title).font(.headline)
-                        Text(news.description ?? "").font(.subheadline)
-                    }
-                }
-            }
-            .navigationTitle("News")
-            .onAppear {
-                NewsService().getNews { news in
-                    self.newsList = news ?? []
-                }
-            }
-        }
-    }
-}
-
-// SwiftUI WebView for displaying web content
-struct WebView: UIViewRepresentable {
-    let url: URL
-    
-    func makeUIView(context: Context) -> WKWebView {
-        WKWebView()
-    }
-    
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        uiView.load(URLRequest(url: url))
-    }
-}
-
-
-
